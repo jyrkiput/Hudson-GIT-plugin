@@ -257,7 +257,7 @@ public class GitSCM extends SCM implements Serializable {
                 IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
 
 
-				IBuildChooser buildChooser = new BuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
+				IBuildChooser buildChooser = new TimeBasedBuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
 
 				if (git.hasGitRepo()) {
 					// Repo is there - do a fetch
@@ -497,7 +497,7 @@ public class GitSCM extends SCM implements Serializable {
                 if (parentLastBuiltRev != null)
                     return parentLastBuiltRev;
 
-                IBuildChooser buildChooser = new BuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
+                IBuildChooser buildChooser = new TimeBasedBuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
 
                 Collection<Revision> candidates = buildChooser.getCandidateRevisions(false, singleBranch);
 				if( candidates.size() == 0 )
@@ -525,7 +525,7 @@ public class GitSCM extends SCM implements Serializable {
 							throws IOException {
                         IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
 
-                        IBuildChooser buildChooser = new BuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
+                        IBuildChooser buildChooser = new TimeBasedBuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
 
 						// Do we need to merge this revision onto MergeTarget
 
@@ -609,7 +609,7 @@ public class GitSCM extends SCM implements Serializable {
 			public Object[] invoke(File localWorkspace, VirtualChannel channel)
 					throws IOException {
                 IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
-                IBuildChooser buildChooser = new BuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
+                IBuildChooser buildChooser = new TimeBasedBuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
 
 				// Straight compile-the-branch
 				listener.getLogger().println("Checking out " + revToBuild);
