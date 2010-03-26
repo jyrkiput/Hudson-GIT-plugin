@@ -90,7 +90,9 @@ public class GitSCM extends SCM implements Serializable {
 
 	private boolean clean;
 
-	private GitWeb browser;
+    private boolean timeBased;
+
+    private GitWeb browser;
 
 	private Collection<SubmoduleConfig> submoduleCfg;
 
@@ -106,13 +108,13 @@ public class GitSCM extends SCM implements Serializable {
 
 	@DataBoundConstructor
 	public GitSCM(
-	        List<RemoteConfig> repositories,
-	        List<BranchSpec> branches,
-	        PreBuildMergeOptions mergeOptions,
-	        boolean doGenerateSubmoduleConfigurations,
-	        Collection<SubmoduleConfig> submoduleCfg,
-	        boolean clean,
-	        GitWeb browser) {
+            List<RemoteConfig> repositories,
+            List<BranchSpec> branches,
+            PreBuildMergeOptions mergeOptions,
+            boolean doGenerateSubmoduleConfigurations,
+            Collection<SubmoduleConfig> submoduleCfg,
+            boolean clean,
+            boolean timeBased, GitWeb browser) {
 
 		// normalization
 	    this.branches = branches;
@@ -126,7 +128,7 @@ public class GitSCM extends SCM implements Serializable {
 		this.submoduleCfg = submoduleCfg;
 
 		this.clean = clean;
-
+        this.timeBased = timeBased;
 		this.configVersion = 1L;
 	}
 
@@ -191,6 +193,9 @@ public class GitSCM extends SCM implements Serializable {
 
 	public boolean getClean() {
 		return this.clean;
+	}
+    public boolean getTimeBased() {
+		return this.timeBased;
 	}
 
 	public List<RemoteConfig> getRepositories() {
@@ -259,9 +264,9 @@ public class GitSCM extends SCM implements Serializable {
                 IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
 
 
-				IBuildChooser buildChooser = new TimeBasedBuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
+                IBuildChooser buildChooser = createBuildChooser(git, listener, buildData);
 
-				if (git.hasGitRepo()) {
+                if (git.hasGitRepo()) {
 					// Repo is there - do a fetch
 					listener.getLogger().println("Fetching changes from the remote Git repositories");
 
@@ -285,7 +290,17 @@ public class GitSCM extends SCM implements Serializable {
 		return pollChangesResult;
 	}
 
-	/**
+    private IBuildChooser createBuildChooser(IGitAPI git, TaskListener listener, BuildData buildData) {
+        IBuildChooser buildChooser;
+        if(timeBased) {
+          return new TimeBasedBuildChooser(this,git,new GitUtils(listener,git), buildData );
+        } else
+        {
+            return new BuildChooser(this, git, new GitUtils(listener, git), buildData);
+        }
+    }
+
+    /**
 	 * Fetch information from a particular remote repository. Attempt to fetch
 	 * from submodules, if they exist in the local WC
 	 *
@@ -499,7 +514,7 @@ public class GitSCM extends SCM implements Serializable {
                 if (parentLastBuiltRev != null)
                     return parentLastBuiltRev;
 
-                IBuildChooser buildChooser = new TimeBasedBuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
+                IBuildChooser buildChooser = createBuildChooser(git, listener, buildData);
 
                 Collection<Revision> candidates = buildChooser.getCandidateRevisions(false, singleBranch);
 				if( candidates.size() == 0 )
@@ -527,9 +542,9 @@ public class GitSCM extends SCM implements Serializable {
 							throws IOException {
                         IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
 
-                        IBuildChooser buildChooser = new TimeBasedBuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
+                        IBuildChooser buildChooser = createBuildChooser(git, listener, buildData);
 
-						// Do we need to merge this revision onto MergeTarget
+                        // Do we need to merge this revision onto MergeTarget
 
 						// Only merge if there's a branch to merge that isn't
 						// us..
@@ -611,9 +626,9 @@ public class GitSCM extends SCM implements Serializable {
 			public Object[] invoke(File localWorkspace, VirtualChannel channel)
 					throws IOException {
                 IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
-                IBuildChooser buildChooser = new TimeBasedBuildChooser(GitSCM.this,git,new GitUtils(listener,git), buildData );
+                IBuildChooser buildChooser = createBuildChooser(git, listener, buildData);
 
-				// Straight compile-the-branch
+                // Straight compile-the-branch
 				listener.getLogger().println("Checking out " + revToBuild);
 				git.checkout(revToBuild.getSha1().name());
 
@@ -853,6 +868,7 @@ public class GitSCM extends SCM implements Serializable {
 				    req.getParameter("git.generate") != null,
 					submoduleCfg,
 					req.getParameter("git.clean") != null,
+                    req.getParameter("git.time_based") != null,
 					gitWeb);
 		}
 

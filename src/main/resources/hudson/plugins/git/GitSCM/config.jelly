@@ -119,6 +119,9 @@
     <f:entry title="Clean after checkout" help="/plugin/git/clean.html">
       <f:checkbox name="git.clean" checked="${scm.clean}" />
     </f:entry>
+    <f:entry title="Use time based build choosing" help="/plugin/git/timebased.html">
+      <f:checkbox name="git.time_based" checked="${scm.timeBased}" />
+    </f:entry>
   </f:advanced>
   
   <t:listScmBrowsers name="git.browser" />
