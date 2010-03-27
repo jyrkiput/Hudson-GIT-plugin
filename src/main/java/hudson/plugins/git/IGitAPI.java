@@ -59,5 +59,5 @@ public interface IGitAPI {
     void commit(File f) throws GitException;
 
     ObjectId mergeBase(ObjectId sha1, ObjectId sha12);
-    String getAllLogEntries();
+    String getAllLogEntries(String branch);
 }

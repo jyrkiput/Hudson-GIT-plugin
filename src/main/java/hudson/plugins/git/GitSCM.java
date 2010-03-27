@@ -19,11 +19,7 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.plugins.git.browser.GitWeb;
 import hudson.plugins.git.opt.PreBuildMergeOptions;
-import hudson.plugins.git.util.Build;
-import hudson.plugins.git.util.BuildChooser;
-import hudson.plugins.git.util.BuildData;
-import hudson.plugins.git.util.GitUtils;
-import hudson.plugins.git.util.IBuildChooser;
+import hudson.plugins.git.util.*;
 import hudson.remoting.VirtualChannel;
 import hudson.scm.ChangeLogParser;
 import hudson.scm.SCM;
@@ -41,6 +37,7 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
 
@@ -90,7 +87,9 @@ public class GitSCM extends SCM implements Serializable {
 
 	private boolean clean;
 
-    private boolean timeBased;
+    private String choosingStrategy = DEFAULT;
+    public static final String DEFAULT = "Default";
+    public static final String GERRIT = "Gerrit";
 
     private GitWeb browser;
 
@@ -98,7 +97,7 @@ public class GitSCM extends SCM implements Serializable {
 
     public static final String GIT_BRANCH = "GIT_BRANCH";
 
-	public Collection<SubmoduleConfig> getSubmoduleCfg() {
+    public Collection<SubmoduleConfig> getSubmoduleCfg() {
 		return submoduleCfg;
 	}
 
@@ -114,7 +113,7 @@ public class GitSCM extends SCM implements Serializable {
             boolean doGenerateSubmoduleConfigurations,
             Collection<SubmoduleConfig> submoduleCfg,
             boolean clean,
-            boolean timeBased, GitWeb browser) {
+            String choosingStrategy, GitWeb browser) {
 
 		// normalization
 	    this.branches = branches;
@@ -128,7 +127,7 @@ public class GitSCM extends SCM implements Serializable {
 		this.submoduleCfg = submoduleCfg;
 
 		this.clean = clean;
-        this.timeBased = timeBased;
+        this.choosingStrategy = choosingStrategy;
 		this.configVersion = 1L;
 	}
 
@@ -194,10 +193,10 @@ public class GitSCM extends SCM implements Serializable {
 	public boolean getClean() {
 		return this.clean;
 	}
-    public boolean getTimeBased() {
-		return this.timeBased;
-	}
 
+    public String getChoosingStrategy() {
+        return choosingStrategy;
+    }
 	public List<RemoteConfig> getRepositories() {
 		// Handle null-value to ensure backwards-compatibility, ie project configuration missing the <repositories/> XML element
 		if (remoteRepositories == null)
@@ -292,8 +291,9 @@ public class GitSCM extends SCM implements Serializable {
 
     private IBuildChooser createBuildChooser(IGitAPI git, TaskListener listener, BuildData buildData) {
         IBuildChooser buildChooser;
-        if(timeBased) {
-          return new TimeBasedBuildChooser(this,git,new GitUtils(listener,git), buildData );
+        if(this.choosingStrategy.equals(GERRIT)) {
+            Logger.getLogger("TEST").info("Using Gerrit as strategy");
+          return new GerritBuildChooser(this,git,new GitUtils(listener,git), buildData );
         } else
         {
             return new BuildChooser(this, git, new GitUtils(listener, git), buildData);
@@ -735,7 +735,7 @@ public class GitSCM extends SCM implements Serializable {
 		return (DescriptorImpl) super.getDescriptor();
 	}
 
-	@Extension
+    @Extension
 	public static final class DescriptorImpl extends SCMDescriptor<GitSCM> {
 
 		private String gitExe;
@@ -868,7 +868,7 @@ public class GitSCM extends SCM implements Serializable {
 				    req.getParameter("git.generate") != null,
 					submoduleCfg,
 					req.getParameter("git.clean") != null,
-                    req.getParameter("git.time_based") != null,
+                    req.getParameter("git.choosing_strategy"),
 					gitWeb);
 		}
 

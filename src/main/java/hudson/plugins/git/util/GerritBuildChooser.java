@@ -5,15 +5,13 @@ import hudson.model.Action;
 import hudson.model.Result;
 import hudson.plugins.git.*;
 import org.joda.time.DateTime;
-import org.spearce.jgit.lib.Commit;
 import org.spearce.jgit.lib.ObjectId;
 
 import java.io.IOException;
-import java.net.Socket;
 import java.util.*;
 import java.util.logging.Logger;
 
-public class TimeBasedBuildChooser implements IBuildChooser {
+public class GerritBuildChooser implements IBuildChooser {
 
     private final String separator = "#";
     private final IGitAPI               git;
@@ -22,8 +20,8 @@ public class TimeBasedBuildChooser implements IBuildChooser {
 
     //-------- Data -----------
     private final BuildData             data;
-
-    public TimeBasedBuildChooser(GitSCM gitSCM, IGitAPI git, GitUtils utils, BuildData data)
+    Logger logger = Logger.getLogger(GerritBuildChooser.class.getName());
+    public GerritBuildChooser(GitSCM gitSCM, IGitAPI git, GitUtils utils, BuildData data)
     {
         this.gitSCM = gitSCM;
         this.git = git;
@@ -34,13 +32,10 @@ public class TimeBasedBuildChooser implements IBuildChooser {
     /**
      * Determines which Revisions to build.
      *
-     * If only one branch is chosen and only one repository is listed, then
-     * just attempt to find the latest revision number for the chosen branch.
+     * Uses git log --all to get every commit in repository. Then orders commits by commit time
+     * and determines what to build next.
      *
-     * If multiple branches are selected or the branches include wildcards, then
-     * use the advanced usecase as defined in the getAdvancedCandidateRevisons
-     * method.
-     *
+     * Doesn't care about branches.
      * @throws IOException
      * @throws GitException
      */
@@ -48,7 +43,7 @@ public class TimeBasedBuildChooser implements IBuildChooser {
             throws GitException, IOException {
       
         Revision last = data.getLastBuiltRevision();
-        String result = git.getAllLogEntries();
+        String result = git.getAllLogEntries(singleBranch);
         Collection<TimedCommit> commits = sortRevList(result);
         Iterator<TimedCommit> i = commits.iterator();
         ArrayList<Revision> revs = new ArrayList<Revision>();
@@ -58,23 +53,11 @@ public class TimeBasedBuildChooser implements IBuildChooser {
             TimedCommit tc = i.next();
             //When encountered last build, break
             if(last != null && tc.commit.name().equals(last.getSha1String())) {
-                lastBuilt = tc.when;
                 break;
             }
-            revs.add(new Revision(tc.commit));
+            addToRevs(revs, tc);
         }
-        //check if there's commits on same second which hasn't been built yet
-        while(i.hasNext()) {
-            TimedCommit tc = i.next();
-            if(tc.when.isEqual(lastBuilt)) {
-                if(!data.hasBeenBuilt(tc.commit)) {
-                    revs.add(new Revision(tc.commit));
-                }
-            } else {
-                //was older, so it is already built (also rest of them are built)
-                break;
-            }
-        }
+
 
         if(last == null) {
             return revs;
@@ -92,12 +75,22 @@ public class TimeBasedBuildChooser implements IBuildChooser {
 
     }
 
+    private void addToRevs(ArrayList<Revision> revs, TimedCommit tc) {
+        Revision rev = new Revision(tc.commit);
+        rev.getBranches().add(new Branch("timebased", rev.getSha1()));
+        revs.add(rev);
+    }
+
+    /* This returns commits that are always in same order.
+     * 
+     */
     private Collection<TimedCommit> sortRevList(String logOutput) {
         SortedSet<TimedCommit> timedCommits = new TreeSet<TimedCommit>();
         String[] lines = logOutput.split("\n");
         for (String s : lines ) {
-            timedCommits.add(parseCommit(s));
+            timedCommits.add(parseCommit(s));            
         }
+        
         return timedCommits;
     }
 
@@ -128,7 +121,12 @@ public class TimeBasedBuildChooser implements IBuildChooser {
 
         public int compareTo(TimedCommit o) {
             //I want newest to be first
-            return -(when.compareTo(o.when));
+            int result = -(when.compareTo(o.when));
+            //If time is equal, keep order from log.
+            if(result == 0) {
+                return -1;
+            }
+            return result;
         }
      }
 
