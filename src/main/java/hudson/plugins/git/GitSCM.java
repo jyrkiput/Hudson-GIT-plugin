@@ -290,10 +290,8 @@ public class GitSCM extends SCM implements Serializable {
 	}
 
     private IBuildChooser createBuildChooser(IGitAPI git, TaskListener listener, BuildData buildData) {
-        IBuildChooser buildChooser;
-        if(this.choosingStrategy.equals(GERRIT)) {
-            Logger.getLogger("TEST").info("Using Gerrit as strategy");
-          return new GerritBuildChooser(this,git,new GitUtils(listener,git), buildData );
+        if(this.choosingStrategy != null && GERRIT.equals(this.choosingStrategy)) {
+            return new GerritBuildChooser(this,git,new GitUtils(listener,git), buildData );
         } else
         {
             return new BuildChooser(this, git, new GitUtils(listener, git), buildData);
