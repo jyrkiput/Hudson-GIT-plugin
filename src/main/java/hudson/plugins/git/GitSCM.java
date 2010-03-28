@@ -237,6 +237,7 @@ public class GitSCM extends SCM implements Serializable {
 	    // Poll for changes. Are there any unbuilt revisions that Hudson ought to build ?
 
 		final String gitExe = getDescriptor().getGitExe();
+        listener.getLogger().println("Using strategy: " + choosingStrategy);
 
 		AbstractBuild lastBuild = (AbstractBuild)project.getLastBuild();
 
@@ -415,6 +416,7 @@ public class GitSCM extends SCM implements Serializable {
 			throws IOException, InterruptedException {
 
 	    listener.getLogger().println("Checkout:" + workspace.getName() + " / " + workspace.getRemote() + " - " + workspace.getChannel());
+        listener.getLogger().println("Using strategy: " + choosingStrategy);
 
 		final String projectName = build.getProject().getName();
 		final int buildNumber = build.getNumber();
