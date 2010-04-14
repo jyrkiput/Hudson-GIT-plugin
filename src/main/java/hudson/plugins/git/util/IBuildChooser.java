@@ -57,4 +57,10 @@ public interface IBuildChooser
      * @return
      */
     Action getData();
+
+    /**
+     * Get name for strategy
+     * @return
+     */
+    String getName();
 }

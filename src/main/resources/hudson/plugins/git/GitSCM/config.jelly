@@ -121,22 +121,16 @@
     </f:entry>
     <f:entry title="Choosing strategy" help="/plugin/git/choosingStrategy.html" field="git.choosing_strategy">
         <select name="git.choosing_strategy">
-            <j:choose>
-                <j:when test="${empty(scm.choosingStrategy)}">
-                    <option value="${scm.DEFAULT}" selected="SELECTED">Default</option>
-                    <option value="${scm.GERRIT}">Gerrit</option>
-                </j:when>
-                <j:otherwise>
-                    <j:if test="${scm.choosingStrategy==scm.DEFAULT}">
-                        <option value="${scm.DEFAULT}" selected="SELECTED" >Default</option>
-                        <option value="${scm.GERRIT}">Gerrit</option>
-                    </j:if>
-                    <j:if test="${scm.choosingStrategy==scm.GERRIT}">
-                        <option value="${scm.DEFAULT}">Default</option>
-                        <option value="${scm.GERRIT}" selected="SELECTED">Gerrit</option>
-                    </j:if>
-                </j:otherwise>
-            </j:choose>
+            <j:forEach var="strategy" items="${descriptor.choosingStrategies}" varStatus="current">
+                <j:choose>
+                    <j:when test="${scm.choosingStrategy==strategy}">
+                        <option value="${strategy}" selected="SELECTED" >${strategy}</option>
+                    </j:when>
+                    <j:otherwise>
+                        <option value="${strategy}" >${strategy}</option>
+                    </j:otherwise>
+                </j:choose>
+            </j:forEach>
         </select>
     </f:entry>
   </f:advanced>

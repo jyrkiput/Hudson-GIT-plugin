@@ -1,4 +1,6 @@
 <div>
  Which strategy to use when selecting revision for building.
- Default will search HEADs for different branches, Gerrit builds every commit.
+ There can be optional or required build choosers from extensions. 
+ Default will check if there's any strategies coming from extension point. If there's one and only one required build choosers, it is used automatically. In other cases, original is used.
+ Original will search HEADs for different branches
 </div>

@@ -8,18 +8,11 @@ import hudson.Proc;
 import hudson.FilePath.FileCallable;
 import hudson.matrix.MatrixBuild;
 import hudson.matrix.MatrixRun;
-import hudson.model.AbstractBuild;
-import hudson.model.AbstractProject;
-import hudson.model.Action;
-import hudson.model.BuildListener;
-import hudson.model.Hudson;
-import hudson.model.ParametersAction;
-import hudson.model.Result;
-import hudson.model.Run;
-import hudson.model.TaskListener;
+import hudson.model.*;
 import hudson.plugins.git.browser.GitWeb;
 import hudson.plugins.git.opt.PreBuildMergeOptions;
 import hudson.plugins.git.util.*;
+import hudson.plugins.git.util.Build;
 import hudson.remoting.VirtualChannel;
 import hudson.scm.ChangeLogParser;
 import hudson.scm.SCM;
@@ -37,7 +30,6 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
 
@@ -89,7 +81,7 @@ public class GitSCM extends SCM implements Serializable {
 
     private String choosingStrategy = DEFAULT;
     public static final String DEFAULT = "Default";
-    public static final String GERRIT = "Gerrit";
+    public static final String ORIGINAL = "Original";
 
     private GitWeb browser;
 
@@ -238,8 +230,11 @@ public class GitSCM extends SCM implements Serializable {
 
 		final String gitExe = getDescriptor().getGitExe();
         listener.getLogger().println("Using strategy: " + choosingStrategy);
+        final List<ExtensionBuildChooser> requiredChoosers = getRequiredBuildChoosers(project, listener);
+        //use ArrayList for serialization
+        final ArrayList<ExtensionBuildChooser> choosers = getExtensionChoosers();
 
-		AbstractBuild lastBuild = (AbstractBuild)project.getLastBuild();
+        AbstractBuild lastBuild = (AbstractBuild)project.getLastBuild();
 
         if( lastBuild != null )
         {
@@ -264,7 +259,7 @@ public class GitSCM extends SCM implements Serializable {
                 IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
 
 
-                IBuildChooser buildChooser = createBuildChooser(git, listener, buildData);
+                IBuildChooser buildChooser = createBuildChooser(git, listener, buildData, choosers, requiredChoosers);
 
                 if (git.hasGitRepo()) {
 					// Repo is there - do a fetch
@@ -290,14 +285,48 @@ public class GitSCM extends SCM implements Serializable {
 		return pollChangesResult;
 	}
 
-    private IBuildChooser createBuildChooser(IGitAPI git, TaskListener listener, BuildData buildData) {
-        if(this.choosingStrategy != null && GERRIT.equals(this.choosingStrategy)) {
-            return new GerritBuildChooser(this,git,new GitUtils(listener,git), buildData );
-        } else
-        {
+    private ArrayList<ExtensionBuildChooser> getExtensionChoosers() {
+        final ArrayList<ExtensionBuildChooser> choosers = new ArrayList(ExtensionBuildChooser.all());
+        return choosers;
+    }
+
+    private IBuildChooser createBuildChooser(IGitAPI git, TaskListener listener, BuildData buildData, List<ExtensionBuildChooser> choosers,
+                                             List<ExtensionBuildChooser> requiredChoosers) {
+
+
+        if(this.choosingStrategy.equals(DEFAULT)) {
+            //Select strategy automatically. If there's only one required extension, use it, otherwise use original
+            if(requiredChoosers.size() == 1) {
+                return instantiateNewBuildChooser(git, listener, buildData, requiredChoosers.get(0));
+            } else {
+                  return new BuildChooser(this, git, new GitUtils(listener, git), buildData);
+              }
+        } else {
+            for(ExtensionBuildChooser c : choosers) {
+                if(choosingStrategy.equals(c.getName())) {
+                    return instantiateNewBuildChooser (git, listener, buildData, c);
+                }
+            }
+
+        }
+        //if you didn't find anything, use original
+        return new BuildChooser(this, git, new GitUtils(listener, git), buildData);
+    }
+
+    private IBuildChooser instantiateNewBuildChooser(IGitAPI git, TaskListener listener, BuildData buildData, ExtensionBuildChooser c) {
+        try {
+            ExtensionBuildChooser chooser = c.getClass().newInstance();
+            chooser.setUtilities(this, git, new GitUtils(listener, git), buildData);
+            return chooser;
+        } catch (InstantiationException e) {
+            listener.getLogger().println("Failed to instantiate a new buildChooser, falling back to original");
+            return new BuildChooser(this, git, new GitUtils(listener, git), buildData);
+        } catch (IllegalAccessException e) {
+            listener.getLogger().println("Failed to instantiate a new buildChooser, falling back to original");
             return new BuildChooser(this, git, new GitUtils(listener, git), buildData);
         }
     }
+
 
     /**
 	 * Fetch information from a particular remote repository. Attempt to fetch
@@ -418,7 +447,9 @@ public class GitSCM extends SCM implements Serializable {
 	    listener.getLogger().println("Checkout:" + workspace.getName() + " / " + workspace.getRemote() + " - " + workspace.getChannel());
         listener.getLogger().println("Using strategy: " + choosingStrategy);
 
-		final String projectName = build.getProject().getName();
+        final List<ExtensionBuildChooser> requiredChoosers = getRequiredBuildChoosers(build.getProject(), listener);
+        final ArrayList<ExtensionBuildChooser> choosers = getExtensionChoosers();
+        final String projectName = build.getProject().getName();
 		final int buildNumber = build.getNumber();
 		final String gitExe = getDescriptor().getGitExe();
 
@@ -514,7 +545,7 @@ public class GitSCM extends SCM implements Serializable {
                 if (parentLastBuiltRev != null)
                     return parentLastBuiltRev;
 
-                IBuildChooser buildChooser = createBuildChooser(git, listener, buildData);
+                IBuildChooser buildChooser = createBuildChooser(git, listener, buildData, choosers, requiredChoosers);
 
                 Collection<Revision> candidates = buildChooser.getCandidateRevisions(false, singleBranch);
 				if( candidates.size() == 0 )
@@ -542,7 +573,7 @@ public class GitSCM extends SCM implements Serializable {
 							throws IOException {
                         IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
 
-                        IBuildChooser buildChooser = createBuildChooser(git, listener, buildData);
+                        IBuildChooser buildChooser = createBuildChooser(git, listener, buildData, choosers, requiredChoosers);
 
                         // Do we need to merge this revision onto MergeTarget
 
@@ -626,7 +657,7 @@ public class GitSCM extends SCM implements Serializable {
 			public Object[] invoke(File localWorkspace, VirtualChannel channel)
 					throws IOException {
                 IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
-                IBuildChooser buildChooser = createBuildChooser(git, listener, buildData);
+                IBuildChooser buildChooser = createBuildChooser(git, listener, buildData, choosers, requiredChoosers);
 
                 // Straight compile-the-branch
 				listener.getLogger().println("Checking out " + revToBuild);
@@ -707,6 +738,29 @@ public class GitSCM extends SCM implements Serializable {
 
 	}
 
+    private List<ExtensionBuildChooser> getRequiredBuildChoosers(AbstractProject project, TaskListener listener) {
+        List<ExtensionBuildChooser> requiredChoosers = new ArrayList<ExtensionBuildChooser>();
+        for(ExtensionBuildChooser c : ExtensionBuildChooser.all()) {
+            if(c.isRequiredFor(project)) {
+                requiredChoosers.add(c);
+            }
+        }
+
+
+        if (requiredChoosers.size() > 1 ) {
+            //Actual decision is made in createBuildChooser
+            listener.getLogger().println("Multiple required choosers, use configuration page to select right one. " +
+                    "Default falls back to Original now.");
+        }
+        if (requiredChoosers.size() == 1 ) {
+            //Actual decision is made in createBuildChooser
+            listener.getLogger().println("Default selects " + requiredChoosers.get(0).getName() +
+                    ", use configuration page to select different");
+        }
+
+        return requiredChoosers;
+    }
+
     public void buildEnvVars(AbstractBuild build, java.util.Map<String, String> env) {
         super.buildEnvVars(build, env);
         env.put(GIT_BRANCH, getSingleBranch(build));
@@ -748,6 +802,15 @@ public class GitSCM extends SCM implements Serializable {
 		public String getDisplayName() {
 			return "Git";
 		}
+        public String[] getChoosingStrategies() {
+            List<String> names = new ArrayList<String>();
+            names.add(DEFAULT);
+            names.add(ORIGINAL);
+            for(ExtensionBuildChooser c : ExtensionBuildChooser.all()) {
+                names.add(c.getName());
+            }
+            return names.toArray(new String[names.size()]);
+        }
 
 		/**
 		 * Path to git executable.

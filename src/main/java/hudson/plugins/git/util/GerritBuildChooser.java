@@ -1,6 +1,7 @@
 package hudson.plugins.git.util;
 
 
+import hudson.Extension;
 import hudson.model.Action;
 import hudson.model.Result;
 import hudson.plugins.git.*;
@@ -9,18 +10,27 @@ import org.spearce.jgit.lib.ObjectId;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.logging.Logger;
 
-public class GerritBuildChooser implements IBuildChooser {
+
+@Extension
+@Deprecated
+public class GerritBuildChooser extends ExtensionBuildChooser {
 
     private final String separator = "#";
-    private final IGitAPI               git;
-    private final GitUtils              utils;
-    private final GitSCM                gitSCM;
+    private IGitAPI               git;
+    private GitUtils              utils;
+    private GitSCM                gitSCM;
 
     //-------- Data -----------
-    private final BuildData             data;
-    Logger logger = Logger.getLogger(GerritBuildChooser.class.getName());
+    private BuildData             data;
+
+    public GerritBuildChooser() {
+        this.gitSCM = null;
+        this.git = null;
+        this.utils = null;
+        this.data = null;
+    }
+
     public GerritBuildChooser(GitSCM gitSCM, IGitAPI git, GitUtils utils, BuildData data)
     {
         this.gitSCM = gitSCM;
@@ -29,6 +39,13 @@ public class GerritBuildChooser implements IBuildChooser {
         this.data = data == null ? new BuildData() : data;
     }
 
+    @Override
+    public void setUtilities(GitSCM gitSCM, IGitAPI git, GitUtils gitUtils, BuildData data) {
+        this.gitSCM = gitSCM;
+        this.git = git;
+        this.utils = gitUtils;
+        this.data = data == null ? new BuildData() : data;
+    }
     /**
      * Determines which Revisions to build.
      *
@@ -42,7 +59,17 @@ public class GerritBuildChooser implements IBuildChooser {
     public Collection<Revision> getCandidateRevisions(boolean isPollCall, String singleBranch)
             throws GitException, IOException {
       
-        Revision last = data.getLastBuiltRevision();
+        Build lastTimeBased = data.getLastBuildOfBranch("timebased");
+
+        Revision last = null;
+        if(lastTimeBased != null) {
+            last = data.getLastBuildOfBranch("timebased").getRevision();
+            if(!last.equals(data.getLastBuiltRevision())) {
+                //previous build wasn't timebased, so consider this as a new start
+                last = null;
+            }
+        }
+
         String result = git.getAllLogEntries(singleBranch);
         Collection<TimedCommit> commits = sortRevList(result);
         Iterator<TimedCommit> i = commits.iterator();
@@ -142,5 +169,10 @@ public class GerritBuildChooser implements IBuildChooser {
     {
         return data;
     }
+
+    public String getName() {
+        return "Gerrit";
+    }
+
 
 }
